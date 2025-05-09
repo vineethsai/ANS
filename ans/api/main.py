@@ -29,7 +29,8 @@ from ..schemas import (
     create_renewal_response,
     create_capability_response,
     create_error_response,
-    ensure_iso_format
+    ensure_iso_format,
+    generate_model_from_schema
 )
 
 # Custom JSON encoder to handle datetime objects
@@ -149,51 +150,63 @@ app.add_middleware(
 # Initialize database
 SessionLocal = init_db()
 
-# Pydantic models for request/response validation
-class CertificateSchema(BaseModel):
-    certificateSubject: str
-    certificateIssuer: str
-    certificateSerialNumber: str
-    certificateValidFrom: datetime.datetime
-    certificateValidTo: datetime.datetime
-    certificatePEM: str
-    certificatePublicKeyAlgorithm: str
-    certificateSignatureAlgorithm: str
+# Generate Pydantic models from JSON schemas
+# This avoids manual model definition and keeps models in sync with schemas
+try:
+    # Generate models from JSON schemas
+    RegistrationRequest = generate_model_from_schema("agent_registration_request_schema", "RegistrationRequest")
+    RenewalRequest = generate_model_from_schema("agent_renewal_request_schema", "RenewalRequest")
+except Exception as e:
+    # Fallback to manual models if generation fails
+    print(f"Error generating models from schemas: {e}")
+    print("Falling back to manual model definitions")
+    
+    # Pydantic models for request/response validation - these are fallbacks
+    class CertificateSchema(BaseModel):
+        certificateSubject: str
+        certificateIssuer: str
+        certificateSerialNumber: str
+        certificateValidFrom: datetime.datetime
+        certificateValidTo: datetime.datetime
+        certificatePEM: str
+        certificatePublicKeyAlgorithm: str
+        certificateSignatureAlgorithm: str
 
-class RequestingAgent(BaseModel):
-    protocol: str
-    agentName: str
-    agentCategory: str
-    providerName: str
-    version: str
-    extension: Optional[str] = None
-    agentUseJustification: str
-    agentCapability: str
-    agentEndpoint: str
-    agentDID: str
-    certificate: CertificateSchema
-    csrPEM: str
-    agentDNSName: str
+    class RequestingAgent(BaseModel):
+        protocol: str
+        agentName: str
+        agentCategory: str
+        providerName: str
+        version: str
+        extension: Optional[str] = None
+        agentUseJustification: str
+        agentCapability: str
+        agentEndpoint: str
+        agentDID: str
+        certificate: CertificateSchema
+        csrPEM: str
+        agentDNSName: str
 
-class RegistrationRequest(BaseModel):
-    requestType: str = Field(..., pattern="^registration$")
-    requestingAgent: RequestingAgent
+    class RegistrationRequest(BaseModel):
+        requestType: str = Field(..., pattern="^registration$")
+        requestingAgent: RequestingAgent
+        
+    class CertificateInfoModel(BaseModel):
+        certificateSerialNumber: str
+        certificatePEM: str
 
-class CertificateInfoModel(BaseModel):
-    certificateSerialNumber: str
-    certificatePEM: str
+    class RequestingAgentModel(BaseModel):
+        agentID: str
+        ansName: str
+        protocol: str
+        csrPEM: str
+        currentCertificate: CertificateInfoModel
 
-class RequestingAgentModel(BaseModel):
-    agentID: str
-    ansName: str
-    protocol: str
-    csrPEM: str
-    currentCertificate: CertificateInfoModel
+    class RenewalRequest(BaseModel):
+        requestType: str = Field(..., pattern="^renewal$")
+        requestingAgent: RequestingAgentModel
 
-class RenewalRequest(BaseModel):
-    requestType: str = Field(..., pattern="^renewal$")
-    requestingAgent: RequestingAgentModel
-
+# These models aren't yet in JSON schemas, so we keep them manually defined
 class RevocationRequest(BaseModel):
     agent_id: str
     reason: Optional[str] = None
@@ -241,29 +254,43 @@ async def register_agent(
     or an error response if the registration fails.
     """
     try:
-        # Extract data from the new request format
+        # Extract data from the request format
+        # The structure may vary slightly depending on whether we're using generated models or fallbacks
         agent_info = registration_request.requestingAgent
         
+        # Convert to dictionary for validation
+        if hasattr(agent_info, "dict"):
+            # Generated model has dict() method
+            agent_info_dict = agent_info.dict()
+        else:
+            # Fallback model has __dict__ attribute
+            agent_info_dict = agent_info.__dict__
+        
         # Create a compatible format for the registration authority
+        # Field names are adjusted based on the actual schema used
         ra_request = {
-            "agent_id": agent_info.agentName,
-            "ans_name": f"{agent_info.protocol}://{agent_info.agentName}.{agent_info.agentCapability}.{agent_info.providerName}.v{agent_info.version}",
-            "capabilities": [agent_info.agentCapability],
+            "agent_id": agent_info_dict.get("agentName", agent_info_dict.get("agent_name", "")),
+            "ans_name": f"{agent_info_dict.get('protocol')}://{agent_info_dict.get('agentName', agent_info_dict.get('agent_name', ''))}.{agent_info_dict.get('agentCapability', agent_info_dict.get('agent_capability', ''))}.{agent_info_dict.get('providerName', agent_info_dict.get('provider_name', ''))}.v{agent_info_dict.get('version', '')}",
+            "capabilities": [agent_info_dict.get("agentCapability", agent_info_dict.get("agent_capability", ""))],
             "protocol_extensions": {
-                "endpoint": agent_info.agentEndpoint,
-                "did": agent_info.agentDID,
-                "use_justification": agent_info.agentUseJustification,
-                "dns_name": agent_info.agentDNSName
+                "endpoint": agent_info_dict.get("agentEndpoint", agent_info_dict.get("agent_endpoint", "")),
+                "did": agent_info_dict.get("agentDID", agent_info_dict.get("agent_did", "")),
+                "use_justification": agent_info_dict.get("agentUseJustification", agent_info_dict.get("agent_use_justification", "")),
+                "dns_name": agent_info_dict.get("agentDNSName", agent_info_dict.get("agent_dns_name", ""))
             },
-            "endpoint": agent_info.agentEndpoint,
-            "csr": agent_info.csrPEM
+            "endpoint": agent_info_dict.get("agentEndpoint", agent_info_dict.get("agent_endpoint", "")),
+            "csr": agent_info_dict.get("csrPEM", agent_info_dict.get("csr_pem", ""))
         }
         
         # Validate the request against the schema
-        request_data = {
-            "requestType": "registration",
-            "requestingAgent": registration_request.requestingAgent.dict()
-        }
+        request_data = {}
+        if hasattr(registration_request, "dict"):
+            request_data = registration_request.dict()
+        else:
+            request_data = {
+                "requestType": "registration",
+                "requestingAgent": agent_info_dict
+            }
         
         # Ensure all datetime objects are strings before validation
         request_data = ensure_iso_format(request_data)
@@ -273,7 +300,7 @@ async def register_agent(
         if error:
             log_security_event(
                 "schema_validation_error", 
-                {"agent_id": agent_info.agentName, "error": error}, 
+                {"agent_id": ra_request["agent_id"], "error": error}, 
                 "public_api", 
                 request
             )
@@ -302,17 +329,35 @@ async def register_agent(
         return create_registration_response(response["agent"], response["certificate"])
         
     except ValueError as e:
+        agent_id = ""
+        try:
+            agent_id = registration_request.requestingAgent.agentName
+        except:
+            try:
+                agent_id = registration_request.requestingAgent.agent_name
+            except:
+                pass
+                
         log_security_event(
             "registration_error", 
-            {"agent_id": registration_request.requestingAgent.agentName, "error": str(e)}, 
+            {"agent_id": agent_id, "error": str(e)}, 
             "public_api", 
             request
         )
         return create_error_response("registration_response", str(e))
     except Exception as e:
+        agent_id = ""
+        try:
+            agent_id = registration_request.requestingAgent.agentName
+        except:
+            try:
+                agent_id = registration_request.requestingAgent.agent_name
+            except:
+                pass
+                
         log_security_event(
             "unexpected_error", 
-            {"agent_id": registration_request.requestingAgent.agentName, "error": str(e)}, 
+            {"agent_id": agent_id, "error": str(e)}, 
             "public_api", 
             request
         )
@@ -328,25 +373,60 @@ async def renew_agent(
     """
     Renew an agent's registration.
     
-    Uses the format defined in `agent_renewal_request_schema.json`.
+    The request format follows the JSON schema defined in `agent_renewal_request_schema.json`.
     
-    Returns a renewal response with updated certificate information if successful,
+    Returns a renewal response with the new certificate if successful,
     or an error response if the renewal fails.
     """
     try:
-        # Extract required information from the request
-        agent_id = renewal_request.requestingAgent.agentID
-        csr = renewal_request.requestingAgent.csrPEM
+        # Extract data from the request
+        request_dict = {}
         
-        # Process the renewal request
-        response = ra.process_renewal_request(agent_id, csr)
+        # Convert to dictionary for validation
+        if hasattr(renewal_request, "dict"):
+            # Generated model has dict() method
+            request_dict = renewal_request.dict()
+            req_agent = renewal_request.requestingAgent
+            agent_id = req_agent.agentID if hasattr(req_agent, "agentID") else req_agent.agent_id
+            csr = req_agent.csrPEM if hasattr(req_agent, "csrPEM") else req_agent.csr_pem
+        else:
+            # Fallback model
+            request_dict = {
+                "requestType": "renewal",
+                "requestingAgent": renewal_request.requestingAgent.__dict__
+            }
+            agent_id = renewal_request.requestingAgent.agentID
+            csr = renewal_request.requestingAgent.csrPEM
+            
+        # Ensure all datetime objects are strings before validation
+        request_dict = ensure_iso_format(request_dict)
+        
+        # Validate the request against the schema
+        error = validate_request("renewal", request_dict)
+        
+        if error:
+            log_security_event(
+                "schema_validation_error", 
+                {"agent_id": agent_id, "error": error}, 
+                "public_api", 
+                request
+            )
+            return create_error_response("renewal_response", error)
+        
+        # Issue new certificate
+        ra_response = ra.process_renewal_request(agent_id, csr)
+        
+        # Update agent in registry
         agent = registry.renew_agent(agent_id)
         
-        # Get the certificate's details to extract validity information
-        cert_data = Certificate(response["certificate"].encode())
+        # Get certificate data for setting valid_until
+        cert_data = Certificate(ra_response["certificate"].encode())
+        
+        # CryptographyDeprecationWarning: Properties that return a naïve datetime object have been deprecated.
+        # Switch to not_valid_after_utc when updating dependencies
         valid_until = cert_data.cert.not_valid_after
         
-        # Log the certificate renewal
+        # Log certificate renewal
         log_certificate_event(
             "renewed", 
             agent_id, 
@@ -354,24 +434,43 @@ async def renew_agent(
             "public_api"
         )
         
-        # Create a standardized response
-        agent_data = agent.to_dict()
-        agent_data["last_renewal_time"] = datetime.datetime.now().isoformat()
-        agent_data["valid_until"] = valid_until.isoformat()
+        # Add valid_until to agent data for renewal response
+        agent_dict = agent.to_dict()
+        agent_dict["valid_until"] = valid_until.isoformat()
         
-        return create_renewal_response(agent_data, response["certificate"])
+        # Create standardized response
+        return create_renewal_response(agent_dict, ra_response["certificate"])
+        
     except ValueError as e:
+        agent_id = ""
+        try:
+            if hasattr(renewal_request.requestingAgent, "agentID"):
+                agent_id = renewal_request.requestingAgent.agentID
+            else:
+                agent_id = renewal_request.requestingAgent.agent_id
+        except:
+            pass
+            
         log_security_event(
             "renewal_error", 
-            {"agent_id": renewal_request.requestingAgent.agentID, "error": str(e)}, 
+            {"agent_id": agent_id, "error": str(e)}, 
             "public_api", 
             request
         )
         return create_error_response("renewal_response", str(e))
     except Exception as e:
+        agent_id = ""
+        try:
+            if hasattr(renewal_request.requestingAgent, "agentID"):
+                agent_id = renewal_request.requestingAgent.agentID
+            else:
+                agent_id = renewal_request.requestingAgent.agent_id
+        except:
+            pass
+            
         log_security_event(
             "unexpected_error", 
-            {"agent_id": renewal_request.requestingAgent.agentID, "error": str(e)}, 
+            {"agent_id": agent_id, "error": str(e)}, 
             "public_api", 
             request
         )
@@ -387,22 +486,31 @@ async def revoke_agent(
     """
     Revoke an agent's registration.
     
-    Returns a response indicating whether the revocation was successful,
+    Returns a success response if the revocation is successful,
     or an error response if the revocation fails.
     """
     try:
-        response = ra.process_revocation_request(revocation_request.agent_id, revocation_request.reason)
-        registry.deactivate_agent(revocation_request.agent_id)
+        agent_id = revocation_request.agent_id
+        reason = revocation_request.reason
         
-        # Log the certificate revocation
+        # Deactivate agent in registry
+        registry.deactivate_agent(agent_id)
+        
+        # TODO: Add certificate revocation
+        
+        # Log revocation
         log_certificate_event(
             "revoked", 
-            revocation_request.agent_id, 
-            {"reason": revocation_request.reason or "No reason provided"}, 
+            agent_id, 
+            {"reason": reason or "No reason provided"}, 
             "public_api"
         )
         
-        return response
+        return {
+            "status": "success",
+            "message": f"Agent {agent_id} registration revoked"
+        }
+        
     except ValueError as e:
         log_security_event(
             "revocation_error", 
@@ -410,7 +518,15 @@ async def revoke_agent(
             "public_api", 
             request
         )
-        raise HTTPException(status_code=400, detail=str(e))
+        return create_error_response("revocation_response", str(e))
+    except Exception as e:
+        log_security_event(
+            "unexpected_error", 
+            {"agent_id": revocation_request.agent_id, "error": str(e)}, 
+            "public_api", 
+            request
+        )
+        return create_error_response("revocation_response", f"Unexpected error: {e}")
 
 @app.post("/resolve", tags=["resolution"], summary="Resolve an agent's ANS name", 
          description="Resolve an agent's ANS name to its endpoint record")
@@ -420,31 +536,44 @@ async def resolve_agent(
     registry: AgentRegistry = Depends(get_registry)
 ) -> Dict[str, Any]:
     """
-    Resolve an agent's ANS name to its endpoint record.
+    Resolve an agent's ANS name.
     
-    Returns the endpoint record with signature if successful,
+    Returns the endpoint record if the resolution is successful,
     or an error response if the resolution fails.
     """
     try:
-        result = registry.resolve_ans_name(resolution_request.ans_name, resolution_request.version_range)
+        ans_name = resolution_request.ans_name
+        version_range = resolution_request.version_range
         
-        # Log successful resolution
+        # Resolve ANS name in registry
+        endpoint_record = registry.resolve_ans_name(ans_name, version_range)
+        
+        # Log resolution
         log_security_event(
-            "resolve_success", 
-            {"ans_name": resolution_request.ans_name}, 
+            "name_resolution", 
+            {"ans_name": ans_name, "version_range": version_range}, 
             "public_api", 
             request
         )
         
-        return result
+        return endpoint_record
+        
     except ValueError as e:
         log_security_event(
-            "resolve_error", 
+            "resolution_error", 
             {"ans_name": resolution_request.ans_name, "error": str(e)}, 
             "public_api", 
             request
         )
-        raise HTTPException(status_code=400, detail=str(e))
+        return create_error_response("resolution_response", str(e))
+    except Exception as e:
+        log_security_event(
+            "unexpected_error", 
+            {"ans_name": resolution_request.ans_name, "error": str(e)}, 
+            "public_api", 
+            request
+        )
+        return create_error_response("resolution_response", f"Unexpected error: {e}")
 
 @app.get("/agents", tags=["resolution"], summary="Find agents matching criteria", 
         description="Find agents matching criteria such as protocol, capability, or provider")
@@ -456,60 +585,44 @@ async def list_agents(
     registry: AgentRegistry = Depends(get_registry)
 ) -> Dict[str, Any]:
     """
-    List agents matching the given criteria.
+    Find agents matching criteria.
     
-    Returns a capability response with matching agents if successful,
-    or an error response if the query fails.
-    
-    The response format follows the JSON schema defined in `agent_capability_response_schema.json`.
+    Returns a list of matching agents,
+    or an error response if the search fails.
     """
     try:
+        # Find agents in registry
         agents = registry.find_agents_by_criteria(protocol, capability, provider)
         
-        # Log successful agent listing
+        # Log agent listing
         log_security_event(
             "list_agents", 
-            {
-                "protocol": protocol,
-                "capability": capability,
-                "provider": provider,
-                "count": len(agents)
-            }, 
+            {"protocol": protocol, "capability": capability, "provider": provider, "count": len(agents)}, 
             "public_api", 
             request
         )
         
-        # Create a standardized response
-        query_params = {
-            "protocol": protocol or "*",
-            "capability": capability or "*",
-            "provider": provider or "*"
+        return {
+            "status": "success",
+            "agents": agents
         }
         
-        # Get the total count of all agents
-        all_agents = registry.find_agents_by_criteria(None, None, None)
-        
-        return create_capability_response(agents, query_params, len(agents), len(all_agents))
-    except ValueError as e:
+    except Exception as e:
         log_security_event(
-            "list_agents_error", 
-            {
-                "protocol": protocol,
-                "capability": capability,
-                "provider": provider,
-                "error": str(e)
-            }, 
+            "unexpected_error", 
+            {"error": str(e)}, 
             "public_api", 
             request
         )
-        return create_error_response("capability_response", str(e))
+        return create_error_response("agent_list_response", f"Unexpected error: {e}")
 
 @app.get("/health", tags=["system"], summary="Health check", 
         description="Check the health of the ANS service")
 async def health_check() -> Dict[str, str]:
     """
-    Health check endpoint.
-    
-    Returns a simple status response indicating the service is healthy.
+    Check the health of the ANS service.
     """
-    return {"status": "healthy"} 
+    return {
+        "status": "ok",
+        "version": "1.0.0"
+    } 

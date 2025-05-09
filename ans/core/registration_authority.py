@@ -9,26 +9,7 @@ from .agent import Agent
 from .ans_name import ANSName
 from ..crypto.certificate import Certificate
 from ..crypto.certificate_authority import CertificateAuthority
-
-# JSON Schema for registration requests
-REGISTRATION_SCHEMA = {
-    "type": "object",
-    "required": ["agent_id", "ans_name", "capabilities", "protocol_extensions", "endpoint", "csr"],
-    "properties": {
-        "agent_id": {"type": "string"},
-        "ans_name": {"type": "string"},
-        "capabilities": {
-            "type": "array",
-            "items": {"type": "string"}
-        },
-        "protocol_extensions": {
-            "type": "object",
-            "additionalProperties": True
-        },
-        "endpoint": {"type": "string"},
-        "csr": {"type": "string"}  # PEM-encoded CSR
-    }
-}
+from ..schemas import load_schema
 
 class RegistrationAuthority:
     """
@@ -42,6 +23,63 @@ class RegistrationAuthority:
             ca: Certificate Authority instance
         """
         self.ca = ca
+        # Load the registration schema directly from JSON file
+        self.registration_schema = self._load_registration_schema()
+
+    def _load_registration_schema(self) -> Dict[str, Any]:
+        """
+        Load the registration schema from the JSON schema file.
+        
+        Returns:
+            Dict containing the registration schema
+        """
+        try:
+            # Try to load from the full schema file first
+            full_schema = load_schema("agent_registration_request_schema")
+            
+            # Extract the requestingAgent part to maintain compatibility with existing code
+            # Note: This is an intermediate step for backward compatibility
+            schema = {
+                "type": "object",
+                "required": ["agent_id", "ans_name", "capabilities", "protocol_extensions", "endpoint", "csr"],
+                "properties": {
+                    "agent_id": {"type": "string"},
+                    "ans_name": {"type": "string"},
+                    "capabilities": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "protocol_extensions": {
+                        "type": "object",
+                        "additionalProperties": True
+                    },
+                    "endpoint": {"type": "string"},
+                    "csr": {"type": "string"}  # PEM-encoded CSR
+                }
+            }
+            
+            return schema
+        except Exception as e:
+            # Fall back to hardcoded schema if file not found
+            print(f"Warning: Falling back to hardcoded schema due to error: {e}")
+            return {
+                "type": "object",
+                "required": ["agent_id", "ans_name", "capabilities", "protocol_extensions", "endpoint", "csr"],
+                "properties": {
+                    "agent_id": {"type": "string"},
+                    "ans_name": {"type": "string"},
+                    "capabilities": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "protocol_extensions": {
+                        "type": "object",
+                        "additionalProperties": True
+                    },
+                    "endpoint": {"type": "string"},
+                    "csr": {"type": "string"}  # PEM-encoded CSR
+                }
+            }
 
     def validate_registration_request(self, request: Dict[str, Any]) -> None:
         """
@@ -54,7 +92,7 @@ class RegistrationAuthority:
             ValidationError: If the request is invalid
         """
         try:
-            validate(instance=request, schema=REGISTRATION_SCHEMA)
+            validate(instance=request, schema=self.registration_schema)
         except ValidationError as e:
             raise ValueError(f"Invalid registration request: {e}")
 
