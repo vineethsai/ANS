@@ -1,0 +1,5 @@
+# Dashboard Screenshot Placeholder
+
+Place a screenshot of the ANS Dashboard UI here named `dashboard.png`.
+
+This is a placeholder file. In a real project, you would take a screenshot of the application and save it in this directory. 
