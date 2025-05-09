@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentCapabilityResponse",
+  "description": "Schema for the response to an agent capability request.",
+  "type": "object",
+  "properties": {
+    "responseType": {
+      "type": "string",
+      "enum": ["capability_response"],
+      "description": "Type of response: 'capability_response' for capability query responses."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failure"],
+      "description": "Status of the capability query."
+    },
+    "matchingAgents": {
+      "type": "array",
+      "description": "List of agents matching the query parameters.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agentID": {
+            "type": "string",
+            "description": "The unique identifier for the agent."
+          },
+          "ansName": {
+            "type": "string",
+            "description": "The ANS name of the agent."
+          },
+          "protocol": {
+            "type": "string",
+            "description": "The protocol used by the agent."
+          },
+          "agentCategory": {
+            "type": "string",
+            "description": "The category of the agent."
+          },
+          "provider": {
+            "type": "string",
+            "description": "The provider of the agent."
+          },
+          "version": {
+            "type": "string",
+            "description": "The version of the agent."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The capabilities of the agent."
+          },
+          "protocolExtensions": {
+            "type": "object",
+            "description": "Additional protocol-specific extensions."
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "The network endpoint for the agent."
+          },
+          "certificate": {
+            "type": "string",
+            "description": "The agent's certificate in PEM format."
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the agent is active."
+          },
+          "lastUpdated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the agent was last updated."
+          }
+        },
+        "required": [
+          "agentID",
+          "ansName",
+          "protocol",
+          "capabilities",
+          "endpoint",
+          "isActive"
+        ]
+      }
+    },
+    "queryParameters": {
+      "type": "object",
+      "description": "The parameters used in the query.",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "description": "The protocol that was filtered by."
+        },
+        "capability": {
+          "type": "string",
+          "description": "The capability that was filtered by."
+        },
+        "provider": {
+          "type": "string",
+          "description": "The provider that was filtered by."
+        },
+        "agentCategory": {
+          "type": "string",
+          "description": "The agent category that was filtered by."
+        },
+        "versionRange": {
+          "type": "string",
+          "description": "The version range that was filtered by."
+        }
+      }
+    },
+    "resultCount": {
+      "type": "integer",
+      "description": "The number of matching agents."
+    },
+    "totalCount": {
+      "type": "integer",
+      "description": "The total number of agents in the registry."
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if the capability query failed."
+    }
+  },
+  "required": [
+    "responseType",
+    "status"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "success" } }
+      },
+      "then": {
+        "required": ["matchingAgents", "queryParameters", "resultCount"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failure" } }
+      },
+      "then": {
+        "required": ["error"]
+      }
+    }
+  ]
+} 

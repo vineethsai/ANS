@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentCapabilityRequest",
+  "description": "Schema for requesting agent capabilities.",
+  "type": "object",
+  "properties": {
+    "requestType": {
+      "type": "string",
+      "enum": ["capability_query"],
+      "description": "Type of request: 'capability_query' to query agent capabilities."
+    },
+    "queryParameters": {
+      "type": "object",
+      "description": "Parameters for the capability query.",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["a2a", "mcp", "acp", "*"],
+          "description": "The protocol to filter by (e.g., a2a, mcp, acp). Use '*' for any protocol."
+        },
+        "capability": {
+          "type": "string",
+          "description": "The capability to filter by (e.g., 'chat', 'translation'). Use '*' for any capability."
+        },
+        "provider": {
+          "type": "string",
+          "description": "The provider to filter by (e.g., 'anthropic', 'openai'). Use '*' for any provider."
+        },
+        "agentCategory": {
+          "type": "string",
+          "description": "The agent category to filter by. Use '*' for any category."
+        },
+        "versionRange": {
+          "type": "string",
+          "description": "The version range to filter by (e.g., '>=1.0.0 <2.0.0'). Use '*' for any version."
+        },
+        "maxResults": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10,
+          "description": "Maximum number of results to return."
+        },
+        "includeInactive": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to include inactive agents in the results."
+        }
+      },
+      "required": [
+        "protocol",
+        "capability"
+      ]
+    },
+    "requestingAgent": {
+      "type": "object",
+      "description": "Information about the agent making the request.",
+      "properties": {
+        "agentID": {
+          "type": "string",
+          "description": "The unique identifier for the agent."
+        },
+        "ansName": {
+          "type": "string",
+          "description": "The ANS name of the agent."
+        },
+        "capabilityJustification": {
+          "type": "string",
+          "description": "Justification for why the agent needs this capability."
+        }
+      },
+      "required": [
+        "agentID",
+        "ansName"
+      ]
+    }
+  },
+  "required": [
+    "requestType",
+    "queryParameters"
+  ]
+} 

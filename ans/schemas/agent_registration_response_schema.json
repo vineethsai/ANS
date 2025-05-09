@@ -1,0 +1,109 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentRegistrationResponse",
+  "description": "Schema for the response to an agent registration request.",
+  "type": "object",
+  "properties": {
+    "responseType": {
+      "type": "string",
+      "enum": ["registration_response"],
+      "description": "Type of response: 'registration_response' for registration responses."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failure"],
+      "description": "Status of the registration request."
+    },
+    "registeredAgent": {
+      "type": "object",
+      "description": "Information about the registered agent.",
+      "properties": {
+        "agentID": {
+          "type": "string",
+          "description": "The unique identifier for the agent."
+        },
+        "ansName": {
+          "type": "string",
+          "description": "The ANS name assigned to the agent."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "The protocol used by the agent (e.g., a2a, mcp, acp)."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The capabilities of the agent."
+        },
+        "protocolExtensions": {
+          "type": "object",
+          "description": "Additional protocol-specific extensions."
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "The network endpoint for the agent."
+        },
+        "certificate": {
+          "type": "string",
+          "description": "The agent's certificate in PEM format."
+        },
+        "registrationTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time the agent was registered."
+        },
+        "lastRenewalTime": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "The time the agent's registration was last renewed, if applicable."
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether the agent is active."
+        }
+      },
+      "required": [
+        "agentID",
+        "ansName",
+        "protocol",
+        "capabilities",
+        "endpoint",
+        "certificate",
+        "registrationTime",
+        "isActive"
+      ]
+    },
+    "certificate": {
+      "type": "string",
+      "description": "The certificate issued to the agent in PEM format."
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if the registration failed."
+    }
+  },
+  "required": [
+    "responseType",
+    "status"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "success" } }
+      },
+      "then": {
+        "required": ["registeredAgent", "certificate"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failure" } }
+      },
+      "then": {
+        "required": ["error"]
+      }
+    }
+  ]
+} 

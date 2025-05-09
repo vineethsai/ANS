@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentRenewalResponse",
+  "description": "Schema for the response to an agent renewal request.",
+  "type": "object",
+  "properties": {
+    "responseType": {
+      "type": "string",
+      "enum": ["renewal_response"],
+      "description": "Type of response: 'renewal_response' for renewal responses."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "failure"],
+      "description": "Status of the renewal request."
+    },
+    "renewedAgent": {
+      "type": "object",
+      "description": "Information about the renewed agent.",
+      "properties": {
+        "agentID": {
+          "type": "string",
+          "description": "The unique identifier for the agent."
+        },
+        "ansName": {
+          "type": "string",
+          "description": "The ANS name of the agent."
+        },
+        "renewalTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time the agent's registration was renewed."
+        },
+        "validUntil": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time until which the renewed registration is valid."
+        }
+      },
+      "required": [
+        "agentID",
+        "ansName",
+        "renewalTime",
+        "validUntil"
+      ]
+    },
+    "newCertificate": {
+      "type": "string",
+      "description": "The new certificate issued to the agent in PEM format."
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if the renewal failed."
+    }
+  },
+  "required": [
+    "responseType",
+    "status"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "success" } }
+      },
+      "then": {
+        "required": ["renewedAgent", "newCertificate"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failure" } }
+      },
+      "then": {
+        "required": ["error"]
+      }
+    }
+  ]
+} 

@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentRenewalRequest",
+  "description": "Schema for renewing an agent's registration.",
+  "type": "object",
+  "properties": {
+    "requestType": {
+      "type": "string",
+      "enum": ["renewal"],
+      "description": "Type of request: 'renewal' to renew an agent's registration."
+    },
+    "requestingAgent": {
+      "type": "object",
+      "description": "Information about the agent making the renewal request.",
+      "properties": {
+        "agentID": {
+          "type": "string",
+          "description": "The unique identifier for the agent."
+        },
+        "ansName": {
+          "type": "string",
+          "description": "The ANS name of the agent."
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["a2a", "mcp", "acp"],
+          "description": "The protocol used by the agent (e.g., a2a, mcp, acp)."
+        },
+        "csrPEM": {
+          "type": "string",
+          "description": "Base64 encoded PEM certificate signing request for renewal."
+        },
+        "currentCertificate": {
+          "type": "object",
+          "description": "The agent's current certificate details",
+          "properties": {
+            "certificateSerialNumber": { 
+              "type": "string",
+              "description": "Serial number of the current certificate."
+            },
+            "certificatePEM": { 
+              "type": "string", 
+              "description": "Base64 encoded PEM certificate currently in use." 
+            }
+          },
+          "required": [
+            "certificateSerialNumber",
+            "certificatePEM"
+          ]
+        }
+      },
+      "required": [
+        "agentID",
+        "ansName",
+        "protocol",
+        "csrPEM",
+        "currentCertificate"
+      ]
+    }
+  },
+  "required": [
+    "requestType",
+    "requestingAgent"
+  ]
+} 
