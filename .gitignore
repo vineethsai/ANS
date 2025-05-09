@@ -1,0 +1,31 @@
+# Python bytecode cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+testvenv/
+
+# Database files
+*.db
+test.db
+
+# Log files
+ans_audit.log
+ans_server.log
+*.log
+
+# Backups
+*.bak
+
+# Environment-specific files
+.env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+
+# Mac OS-specific files
+.DS_Store
