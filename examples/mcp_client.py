@@ -242,6 +242,47 @@ def simulate_mcp_client(endpoint_record):
         print(f"Error processing MCP specifications: {e}")
         return False
 
+def renew_agent(agent_id, ans_name, protocol, private_key_pem):
+    """Renew an agent's registration using the new format."""
+    # Load the private key
+    private_key = serialization.load_pem_private_key(
+        private_key_pem,
+        password=None
+    )
+    
+    # Create a new CSR
+    csr_pem = create_csr(agent_id, private_key)
+    
+    # Generate a self-signed certificate for current cert info
+    cert_info = create_self_signed_cert(agent_id, private_key)
+    
+    # Create renewal request
+    request_data = {
+        "requestType": "renewal",
+        "requestingAgent": {
+            "agentID": agent_id,
+            "ansName": ans_name,
+            "protocol": protocol,
+            "csrPEM": csr_pem.decode('utf-8'),
+            "currentCertificate": {
+                "certificateSerialNumber": cert_info["certificateSerialNumber"],
+                "certificatePEM": cert_info["certificatePEM"]
+            }
+        }
+    }
+    
+    response = requests.post(
+        f"{ANS_URL}/renew",
+        json=request_data
+    )
+    
+    if response.status_code != 200:
+        print(f"Renewal failed with status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+    
+    return response.json()
+
 def main():
     """Example usage of the MCP client."""
     # Register an MCP-compatible agent
@@ -287,6 +328,19 @@ def main():
     # Simulate an MCP client using the resolved endpoint
     print("\nSimulating MCP client...")
     simulate_mcp_client(endpoint_record)
+    
+    # Renew the agent's registration
+    print("\nRenewing MCP agent registration...")
+    renewal_result = renew_agent(agent_id, ans_name, "mcp", private_key)
+    
+    if renewal_result:
+        print("Renewal successful!")
+        if renewal_result.get("status") == "success":
+            renewed_agent = renewal_result.get("renewedAgent", {})
+            print(f"Renewal time: {renewed_agent.get('renewalTime')}")
+            print(f"Valid until: {renewed_agent.get('validUntil')}")
+        else:
+            print(f"Renewal error: {renewal_result.get('error')}")
     
     # Find MCP agents
     print("\nFinding all MCP agents...")

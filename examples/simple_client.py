@@ -133,6 +133,75 @@ def register_agent(agent_name, agent_category, provider_name, version, capabilit
     
     return response.json()
 
+def renew_agent(agent_id, ans_name, protocol, private_key_pem):
+    """Renew an agent's registration using the new format."""
+    print(f"Preparing to renew agent: {agent_id}")
+    
+    # Load the private key
+    private_key = serialization.load_pem_private_key(
+        private_key_pem,
+        password=None
+    )
+    
+    # Create a new CSR
+    csr_pem = create_csr(agent_id, private_key)
+    
+    # Generate a self-signed certificate for current cert info
+    subject = issuer = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, agent_id),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Test Organization"),
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+    ])
+    
+    now = datetime.datetime.utcnow()
+    cert = x509.CertificateBuilder().subject_name(
+        subject
+    ).issuer_name(
+        issuer
+    ).public_key(
+        private_key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        now
+    ).not_valid_after(
+        now + datetime.timedelta(days=30)
+    ).sign(private_key, hashes.SHA256())
+    
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    
+    # Create renewal request
+    request_data = {
+        "requestType": "renewal",
+        "requestingAgent": {
+            "agentID": agent_id,
+            "ansName": ans_name,
+            "protocol": protocol,
+            "csrPEM": csr_pem.decode('utf-8'),
+            "currentCertificate": {
+                "certificateSerialNumber": str(cert.serial_number),
+                "certificatePEM": cert_pem.decode('utf-8')
+            }
+        }
+    }
+    
+    print(f"Sending renewal request for agent: {agent_id}")
+    
+    # Print the request data for debugging
+    print(f"Request data: {json.dumps(request_data, indent=2)}")
+    
+    response = requests.post(
+        f"{ANS_URL}/renew",
+        json=request_data
+    )
+    
+    if response.status_code != 200:
+        print(f"Renewal failed with status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+    
+    return response.json()
+
 def main():
     """Simple client usage example."""
     # Agent information (minimal setup)
@@ -159,6 +228,24 @@ def main():
     if response:
         print("Registration successful!")
         print(json.dumps(response, indent=2))
+        
+        # Get registered agent details
+        agent_info = response.get("registeredAgent", {})
+        agent_id = agent_info.get("agentID")
+        ans_name = agent_info.get("ansName")
+        
+        # For renewal, we need the private key
+        _, private_key_pem = generate_key_pair()
+        
+        # Renew the agent
+        print("\nRenewing agent registration...")
+        renewal_response = renew_agent(agent_id, ans_name, protocol, private_key_pem)
+        
+        if renewal_response:
+            print("Renewal successful!")
+            print(json.dumps(renewal_response, indent=2))
+        else:
+            print("Renewal failed!")
     else:
         print("Registration failed!")
 

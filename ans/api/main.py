@@ -8,7 +8,7 @@ import json
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 
 from .logging import (
@@ -140,10 +140,10 @@ async def rate_limit_middleware(request: Request, call_next):
 # Add CORS middleware with more specific settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins since APIs are public
+    allow_origins=["*", "http://localhost:3000"],  # Allow all origins and our frontend dev server
     allow_credentials=True,
-    allow_methods=["GET", "POST"],  # Restrict to necessary methods
-    allow_headers=["Content-Type"],  # Restrict to necessary headers
+    allow_methods=["GET", "POST", "OPTIONS"],  # Include OPTIONS for CORS preflight
+    allow_headers=["Content-Type", "Authorization"],  # Include Authorization for future use
 )
 
 # Initialize database
@@ -179,9 +179,20 @@ class RegistrationRequest(BaseModel):
     requestType: str = Field(..., pattern="^registration$")
     requestingAgent: RequestingAgent
 
+class CertificateInfoModel(BaseModel):
+    certificateSerialNumber: str
+    certificatePEM: str
+
+class RequestingAgentModel(BaseModel):
+    agentID: str
+    ansName: str
+    protocol: str
+    csrPEM: str
+    currentCertificate: CertificateInfoModel
+
 class RenewalRequest(BaseModel):
-    agent_id: str
-    csr: str
+    requestType: str = Field(..., pattern="^renewal$")
+    requestingAgent: RequestingAgentModel
 
 class RevocationRequest(BaseModel):
     agent_id: str
@@ -317,41 +328,42 @@ async def renew_agent(
     """
     Renew an agent's registration.
     
-    For backward compatibility, this endpoint still accepts the legacy format.
-    New clients should follow the format in `agent_renewal_request_schema.json`.
+    Uses the format defined in `agent_renewal_request_schema.json`.
     
     Returns a renewal response with updated certificate information if successful,
     or an error response if the renewal fails.
     """
     try:
-        # For backward compatibility, accept the old format but log a warning
-        log_security_event(
-            "deprecated_format", 
-            {"agent_id": renewal_request.agent_id, "endpoint": "/renew"}, 
-            "public_api", 
-            request
-        )
+        # Extract required information from the request
+        agent_id = renewal_request.requestingAgent.agentID
+        csr = renewal_request.requestingAgent.csrPEM
         
-        response = ra.process_renewal_request(renewal_request.agent_id, renewal_request.csr)
-        agent = registry.renew_agent(renewal_request.agent_id)
+        # Process the renewal request
+        response = ra.process_renewal_request(agent_id, csr)
+        agent = registry.renew_agent(agent_id)
+        
+        # Get the certificate's details to extract validity information
+        cert_data = Certificate(response["certificate"].encode())
+        valid_until = cert_data.cert.not_valid_after
         
         # Log the certificate renewal
         log_certificate_event(
             "renewed", 
-            renewal_request.agent_id, 
-            {}, 
+            agent_id, 
+            {"valid_until": valid_until.isoformat()}, 
             "public_api"
         )
         
         # Create a standardized response
         agent_data = agent.to_dict()
         agent_data["last_renewal_time"] = datetime.datetime.now().isoformat()
+        agent_data["valid_until"] = valid_until.isoformat()
         
         return create_renewal_response(agent_data, response["certificate"])
     except ValueError as e:
         log_security_event(
             "renewal_error", 
-            {"agent_id": renewal_request.agent_id, "error": str(e)}, 
+            {"agent_id": renewal_request.requestingAgent.agentID, "error": str(e)}, 
             "public_api", 
             request
         )
@@ -359,7 +371,7 @@ async def renew_agent(
     except Exception as e:
         log_security_event(
             "unexpected_error", 
-            {"agent_id": renewal_request.agent_id, "error": str(e)}, 
+            {"agent_id": renewal_request.requestingAgent.agentID, "error": str(e)}, 
             "public_api", 
             request
         )

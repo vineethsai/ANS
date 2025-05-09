@@ -184,6 +184,10 @@ def create_renewal_response(agent_data: Dict[str, Any], new_certificate: str) ->
     # Ensure any datetime objects are converted to ISO format strings
     agent_data = ensure_iso_format(agent_data)
     
+    # Ensure valid_until is present (required by schema)
+    if not agent_data.get("valid_until"):
+        raise ValueError("valid_until field is required for renewal response")
+    
     response = {
         "responseType": "renewal_response",
         "status": "success",
@@ -191,7 +195,7 @@ def create_renewal_response(agent_data: Dict[str, Any], new_certificate: str) ->
             "agentID": agent_data["agent_id"],
             "ansName": agent_data["ans_name"],
             "renewalTime": agent_data["last_renewal_time"],
-            "validUntil": agent_data.get("valid_until", "")
+            "validUntil": agent_data["valid_until"]
         },
         "newCertificate": new_certificate
     }
