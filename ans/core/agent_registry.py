@@ -90,12 +90,15 @@ class AgentRegistry:
         except Exception as e:
             raise
 
-    def renew_agent(self, agent_id: str) -> None:
+    def renew_agent(self, agent_id: str) -> Agent:
         """
         Renew an agent's registration.
         
         Args:
             agent_id: ID of the agent to renew
+            
+        Returns:
+            Agent: The renewed Agent object
             
         Raises:
             ValueError: If agent not found or renewal fails
@@ -107,6 +110,24 @@ class AgentRegistry:
         agent_model.last_renewal_time = datetime.utcnow()
         agent_model.is_active = True
         self.db.commit()
+        
+        # Convert the model back to an Agent object
+        try:
+            ans_name = ANSName.parse(agent_model.ans_name)
+            agent = Agent(
+                agent_id=agent_model.agent_id,
+                ans_name=ans_name,
+                capabilities=agent_model.capabilities,
+                protocol_extensions=agent_model.protocol_extensions,
+                endpoint=agent_model.endpoint,
+                certificate=agent_model.certificate,
+                registration_time=agent_model.registration_time,
+                last_renewal_time=agent_model.last_renewal_time,
+                is_active=agent_model.is_active
+            )
+            return agent
+        except Exception as e:
+            raise ValueError(f"Error creating Agent object: {e}")
 
     def deactivate_agent(self, agent_id: str) -> None:
         """
