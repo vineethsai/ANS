@@ -16,17 +16,31 @@ export interface Agent {
   isActive: boolean;
 }
 
+// Backend API agent format (snake_case)
+interface BackendAgent {
+  agent_id: string;
+  ans_name: string;
+  capabilities: string[];
+  protocol_extensions: Record<string, any>;
+  endpoint: string;
+  certificate: string;
+  registration_time: string;
+  last_renewal_time: string | null;
+  is_active: boolean;
+}
+
 export interface AgentListResponse {
   responseType: string;
   status: string;
-  matchingAgents: Agent[];
-  queryParameters: {
+  matchingAgents?: Agent[];
+  agents?: BackendAgent[];
+  queryParameters?: {
     protocol: string;
     capability: string;
     provider: string;
   };
-  resultCount: number;
-  totalCount: number;
+  resultCount?: number;
+  totalCount?: number;
 }
 
 export interface AgentRegistrationResponse {
@@ -61,10 +75,55 @@ const ansService = {
       if (provider) params.provider = provider;
       
       const response = await axios.get<AgentListResponse>(`${API_URL}/agents`, { params });
+      
+      // Make sure we have a valid response
+      if (!response.data || typeof response.data !== 'object') {
+        return { 
+          status: 'error', 
+          message: 'Invalid response from server',
+          matchingAgents: []
+        };
+      }
+      
+      // Map the 'agents' field from API to 'matchingAgents' expected by the frontend
+      if (response.data.agents && !response.data.matchingAgents) {
+        // Transform the API response agents (snake_case) to the frontend format (camelCase)
+        const transformedAgents = response.data.agents.map(agent => ({
+          agentID: agent.agent_id,
+          ansName: agent.ans_name,
+          // Extract protocol from ans_name (format: protocol://agent_id.capability.provider.vVersion)
+          protocol: agent.ans_name.split('://')[0],
+          capabilities: agent.capabilities,
+          protocolExtensions: agent.protocol_extensions,
+          endpoint: agent.endpoint,
+          certificate: agent.certificate,
+          registrationTime: agent.registration_time,
+          lastRenewalTime: agent.last_renewal_time,
+          isActive: agent.is_active
+        }));
+        
+        return {
+          ...response.data,
+          matchingAgents: transformedAgents
+        };
+      }
+      
+      // Ensure we have matchingAgents array
+      if (!response.data.matchingAgents) {
+        return {
+          ...response.data,
+          matchingAgents: []
+        };
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Error fetching agents:', error);
-      throw error;
+      return {
+        status: 'error',
+        message: 'Failed to fetch agents',
+        matchingAgents: []
+      };
     }
   },
 

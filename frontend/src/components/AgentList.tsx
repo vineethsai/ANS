@@ -7,6 +7,19 @@ interface AgentListProps {
   provider?: string;
 }
 
+// Helper function to safely format dates
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  
+  try {
+    const date = new Date(dateString);
+    // Check if date is valid
+    return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
+  } catch (error) {
+    return 'Invalid Date';
+  }
+};
+
 const AgentList: React.FC<AgentListProps> = ({ protocol, capability, provider }) => {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -18,7 +31,7 @@ const AgentList: React.FC<AgentListProps> = ({ protocol, capability, provider })
         setLoading(true);
         const response = await ansService.getAgents(protocol, capability, provider);
         if (response.status === 'success') {
-          setAgents(response.matchingAgents);
+          setAgents(response.matchingAgents || []);
           setError(null);
         } else {
           setError(response.status);
@@ -61,14 +74,14 @@ const AgentList: React.FC<AgentListProps> = ({ protocol, capability, provider })
         {agents.map((agent) => (
           <div key={agent.agentID} className="agent-card">
             <h3>{agent.agentID}</h3>
-            <p><strong>ANS Name:</strong> {agent.ansName}</p>
-            <p><strong>Protocol:</strong> {agent.protocol}</p>
-            <p><strong>Capabilities:</strong> {agent.capabilities.join(', ')}</p>
-            <p><strong>Endpoint:</strong> {agent.endpoint}</p>
+            <p><strong>ANS Name:</strong> {agent.ansName || 'N/A'}</p>
+            <p><strong>Protocol:</strong> {agent.protocol || 'N/A'}</p>
+            <p><strong>Capabilities:</strong> {agent.capabilities?.join(', ') || 'N/A'}</p>
+            <p><strong>Endpoint:</strong> {agent.endpoint || 'N/A'}</p>
             <p><strong>Status:</strong> {agent.isActive ? 'Active' : 'Inactive'}</p>
-            <p><strong>Registered:</strong> {new Date(agent.registrationTime).toLocaleString()}</p>
+            <p><strong>Registered:</strong> {formatDate(agent.registrationTime)}</p>
             {agent.lastRenewalTime && (
-              <p><strong>Last Renewed:</strong> {new Date(agent.lastRenewalTime).toLocaleString()}</p>
+              <p><strong>Last Renewed:</strong> {formatDate(agent.lastRenewalTime)}</p>
             )}
           </div>
         ))}

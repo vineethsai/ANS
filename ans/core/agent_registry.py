@@ -10,6 +10,7 @@ from .agent import Agent
 from .ans_name import ANSName
 from ..crypto.certificate import Certificate
 from ..crypto.certificate_authority import CertificateAuthority
+import semver
 
 class AgentRegistry:
     """
@@ -152,7 +153,7 @@ class AgentRegistry:
         
         Args:
             ans_name: ANS name to resolve
-            version_range: Optional version range to match
+            version_range: Optional version range to match (e.g., "^1.0.0", ">=1.2.0 <2.0.0")
             
         Returns:
             Dict containing the endpoint record
@@ -167,18 +168,49 @@ class AgentRegistry:
             except ValueError as e:
                 raise ValueError(f"Invalid ANS name: {e}")
 
-            # Query database
+            # Query database for matching agents
             query = self.db.query(AgentModel).filter(
                 AgentModel.ans_name.like(f"{name.protocol}://{name.agent_id}.{name.capability}.{name.provider}.v%")
-            )
+            ).filter_by(is_active=True)
 
-            if version_range:
-                # TODO: Implement version range matching
-                pass
-
-            agent_model = query.filter_by(is_active=True).first()
-            if not agent_model:
+            # Get all matching agents
+            matching_agents = query.all()
+            if not matching_agents:
                 raise ValueError(f"No active agent found for {ans_name}")
+            
+            # If no version range specified, use the exact version or the latest version
+            if not version_range:
+                # First try to find exact version match
+                exact_match = next((agent for agent in matching_agents 
+                                    if agent.ans_name == str(name)), None)
+                
+                if exact_match:
+                    agent_model = exact_match
+                else:
+                    # Otherwise, get the latest version
+                    agent_model = matching_agents[0]
+                    latest_version = ANSName.parse(agent_model.ans_name).version
+                    
+                    for agent in matching_agents[1:]:
+                        current_version = ANSName.parse(agent.ans_name).version
+                        if semver.VersionInfo.parse(current_version) > semver.VersionInfo.parse(latest_version):
+                            latest_version = current_version
+                            agent_model = agent
+            else:
+                # Apply version range matching
+                compatible_agents = []
+                
+                for agent in matching_agents:
+                    agent_ans_name = ANSName.parse(agent.ans_name)
+                    if agent_ans_name.satisfies_version_range(version_range):
+                        compatible_agents.append((agent, semver.VersionInfo.parse(agent_ans_name.version)))
+                
+                if not compatible_agents:
+                    raise ValueError(f"No agent matches version range {version_range} for {ans_name}")
+                
+                # Sort by version (highest first) and take the highest compatible version
+                compatible_agents.sort(key=lambda x: x[1], reverse=True)
+                agent_model = compatible_agents[0][0]
 
             # Create endpoint record
             endpoint_record = {

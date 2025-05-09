@@ -7,7 +7,7 @@ import datetime
 import json
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field, validator
 from sqlalchemy.orm import Session
 
@@ -57,24 +57,77 @@ app = FastAPI(
     title="Agent Name Service",
     description="A universal directory for AI agents",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_tags=[
-        {
-            "name": "registration",
-            "description": "API endpoints for agent registration, renewal, and revocation"
-        },
-        {
-            "name": "resolution",
-            "description": "API endpoints for resolving agent names and finding agents"
-        },
-        {
-            "name": "system",
-            "description": "System health and status endpoints"
-        }
-    ],
+    docs_url=None,  # Disable automatic Swagger UI
+    redoc_url=None,  # Disable ReDoc
+    openapi_url=None,  # Disable OpenAPI JSON generation
     default_response_class=CustomJSONResponse
 )
+
+# Simple HTML documentation for the API
+API_DOC_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ANS API Documentation</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; line-height: 1.5; }
+        h1, h2 { color: #333; }
+        h2 { margin-top: 30px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .endpoint { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; }
+        .method { font-weight: bold; color: #e91e63; }
+        .path { font-family: monospace; color: #333; }
+        .description { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Agent Name Service API</h1>
+    <p>A universal directory for AI agents</p>
+    
+    <h2>Registration Endpoints</h2>
+    
+    <div class="endpoint">
+        <div><span class="method">POST</span> <span class="path">/register</span></div>
+        <div class="description">Register a new agent in the ANS, providing certificate information, endpoints, capabilities, etc.</div>
+    </div>
+    
+    <div class="endpoint">
+        <div><span class="method">POST</span> <span class="path">/renew</span></div>
+        <div class="description">Renew an agent's registration by providing a new CSR</div>
+    </div>
+    
+    <div class="endpoint">
+        <div><span class="method">POST</span> <span class="path">/revoke</span></div>
+        <div class="description">Revoke an agent's registration, optionally providing a reason</div>
+    </div>
+    
+    <h2>Resolution Endpoints</h2>
+    
+    <div class="endpoint">
+        <div><span class="method">POST</span> <span class="path">/resolve</span></div>
+        <div class="description">Resolve an agent's ANS name to its endpoint record</div>
+    </div>
+    
+    <div class="endpoint">
+        <div><span class="method">GET</span> <span class="path">/agents</span></div>
+        <div class="description">Find agents matching criteria such as protocol, capability, or provider</div>
+    </div>
+    
+    <h2>System Endpoints</h2>
+    
+    <div class="endpoint">
+        <div><span class="method">GET</span> <span class="path">/health</span></div>
+        <div class="description">Check the health of the ANS service</div>
+    </div>
+    
+    <p><em>Note: The automatic API documentation (Swagger/ReDoc) is currently disabled. Please refer to the README or contact the administrator for detailed API specifications.</em></p>
+</body>
+</html>
+"""
+
+@app.get("/docs", response_class=HTMLResponse)
+async def custom_docs():
+    """Serve a simple HTML API documentation page."""
+    return API_DOC_HTML
 
 # Rate limiting configuration
 RATE_LIMIT = {
