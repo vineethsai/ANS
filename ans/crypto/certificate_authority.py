@@ -24,7 +24,7 @@ class CertificateAuthority:
             ca_cert.get_serial_number(): ca_cert
         }
 
-    def issue_certificate(self, csr_data: bytes, validity_days: int = 365) -> Certificate:
+    def issue_certificate(self, csr_data: bytes, validity_days: int = 365) -> bytes:
         """
         Issue a new certificate by signing a CSR.
         
@@ -33,7 +33,7 @@ class CertificateAuthority:
             validity_days: Number of days the certificate will be valid
             
         Returns:
-            New Certificate instance
+            PEM-encoded certificate data
             
         Raises:
             ValueError: If the CSR is invalid
@@ -46,7 +46,7 @@ class CertificateAuthority:
             serial = cert.get_serial_number()
             self._certificate_store[serial] = cert
             
-            return cert
+            return cert_data
         except Exception as e:
             raise ValueError(f"Failed to issue certificate: {e}")
 
@@ -82,16 +82,16 @@ class CertificateAuthority:
             bool: True if the certificate chain is valid
         """
         try:
+            # Check if certificate is revoked first
+            if self.is_certificate_revoked(cert.get_serial_number()):
+                return False
+                
             # Check if certificate is in store
             is_in_store = cert.get_serial_number() in self._certificate_store
             
             # If certificate is in our store, we can trust it (we issued it)
             if is_in_store:
                 return True
-            
-            # Check if certificate is revoked
-            if self.is_certificate_revoked(cert.get_serial_number()):
-                return False
             
             # Check if certificate is valid
             if not cert.is_valid():

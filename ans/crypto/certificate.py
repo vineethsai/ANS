@@ -18,10 +18,14 @@ class Certificate:
         Initialize with certificate data.
         
         Args:
-            cert_data: PEM-encoded certificate data
+            cert_data: PEM-encoded certificate data or another Certificate object
         """
-        self.cert = x509.load_pem_x509_certificate(cert_data)
-        self._private_key = None  # Only set for self-signed certificates
+        if isinstance(cert_data, Certificate):
+            self.cert = cert_data.cert
+            self._private_key = cert_data._private_key
+        else:
+            self.cert = x509.load_pem_x509_certificate(cert_data)
+            self._private_key = None  # Only set for self-signed certificates
 
     @classmethod
     def generate_self_signed_cert(cls, 

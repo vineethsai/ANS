@@ -76,7 +76,7 @@ A2A_SCHEMA = {
         },
         "metadata": {
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": True
         }
     }
 }
